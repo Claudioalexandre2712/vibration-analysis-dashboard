@@ -2,6 +2,10 @@
 
 Aplicação web em português para explorar ensaios CSV de aceleração. FFT com janela Hann, RMS, curtose de Pearson, assimetria, integração espectral de velocidade, estimativa de rotação, média síncrona por volta e envelope de Hilbert. Frequências de rolamento e engrenamento usam os parâmetros informados.
 
+## Resultados em cinco abas
+
+Diagnóstico Geral; Gráfico de Defeitos (espectro com faixas e picos); Gráficos de Análise (onda e FFT brutas, onda e FFT processadas, RMS móvel); Análise de Rolamentos (envelope e referências geométricas); Status de Saúde (polar de 1X, métricas e tabela de faixas). A fase de 1X é ajustada na frequência exata da rotação e referida ao início do registro, sem referência física de chave de fase.
+
 ## Executar
 
 Requer Python 3.12. Na pasta do repositório:
@@ -29,11 +33,11 @@ Abra http://127.0.0.1:5000. Não há escrita de banco ou criação de diretório
 
 Métricas usam o sinal convertido para m/s² com média removida, sem janela. O espectro usa janela Hann periódica e correção de ganho coerente; amplitude de pico com DC/Nyquist tratados separadamente. Valores espectrais entre bins sofrem leakage/scalloping; resolução é fs/N.
 
-Velocidade é integrada no domínio espectral, limitada à banda declarada (padrão 10–1000 Hz, truncada por Nyquist); DC e Nyquist são excluídos da integração. Para registros não periódicos, efeitos de borda/leakage podem alterar o valor: escolha ensaios representativos e compare com instrumentos/linha de base. Não existe classificação normativa automática de severidade.
+Velocidade é integrada no domínio espectral, limitada à banda declarada (padrão 10–1000 Hz, truncada por Nyquist); DC e Nyquist são excluídos da integração. Para registros não periódicos, efeitos de borda/leakage podem alterar o valor: escolha ensaios representativos e compare com instrumentos/linha de base. O formulário permite comparação orientativa pelos limites 2,8 / 7,1 / 18 mm/s, ativada por padrão e desativável. Não é classificação normativa; a adequação dos limites e da banda depende da máquina. Banda sem bins resolvidos é recusada.
 
 RPM manual prevalece. Na ausência, tacômetro válido é usado; sem ambos, o algoritmo estima uma referência a partir de picos e relações harmônicas. Essa referência pode ser incorreta para sinais com ruído, fontes múltiplas ou fundamental ausente; a interface sempre avisa. Não é medição independente de rotação.
 
-TSA é opcional e exige RPM estável informado ou tacômetro; resultado da média é mostrado na forma de onda. FFT principal, métricas e indícios continuam usando o sinal sem DC para que impactos/energia não síncrona não desapareçam da avaliação global.
+TSA é opcional e exige RPM estável informado ou tacômetro; resultado da média é mostrado na forma de onda e na FFT processada. FFT de diagnóstico, métricas e indícios continuam usando o sinal sem DC para que impactos/energia não síncrona não desapareçam da avaliação global.
 
 Envelope: filtro Butterworth de ordem 4, fase zero, entre 0,1 fs e 0,45 fs; módulo da Hilbert, remoção de média e FFT com Hann. Essa banda automática precisa ser avaliada contra a ressonância portadora do ensaio; não é otimização automática da banda de rolamento.
 
@@ -57,7 +61,7 @@ Arquivos são processados em memória durante a requisição; o código não os 
 | GET `/api/examples/harmonicos` | Harmônicos sintéticos |
 | GET `/api/examples/impactos` | Impactos sintéticos |
 
-Campos de análise: `signal_column`, `time_column`, `tach_column` (`__none__` desativa tempo/tac), `unit`, `sampling_frequency`, `rpm_manual`, `machine`, `n`, `d`, `p`, `theta`, `num_dentes`, `velocity_min`, `velocity_max`, `tsa=on`. Parâmetros geométricos são todos opcionais em conjunto. Erros de dados retornam 400; limite de tamanho 413. Sem sinal de demonstração em substituição a falhas.
+Campos de análise: `signal_column`, `time_column`, `tach_column` (`__none__` desativa tempo/tac), `unit`, `sampling_frequency`, `rpm_manual`, `machine`, `n`, `d`, `p`, `theta`, `num_dentes`, `velocity_min`, `velocity_max`, `tsa=on`, `health_reference=orientative` (opcional). Parâmetros geométricos são todos opcionais em conjunto. Erros de dados retornam 400; limite de tamanho 413. Sem sinal de demonstração em substituição a falhas.
 
 Gráficos retornam no máximo 2000 pontos por curva, preservando extremos ou picos por intervalo. FFT/métricas usam todas as amostras. Essa redução limita o detalhe visual e deve ser considerada ao ampliar o gráfico.
 

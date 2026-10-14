@@ -39,6 +39,7 @@
       <small>Preencha os quatro campos para calcular BPFO, BPFI, BSF e FTF.</small>
       <label for="num-dentes">Dentes da engrenagem</label><input id="num-dentes" name="num_dentes" type="number" min="0" max="10000" step="1" placeholder="Opcional">
       <div class="pair"><div><label for="velocity-min">Velocidade: mínimo (Hz)</label><input id="velocity-min" name="velocity_min" type="number" min="0.01" step="any" value="10"></div><div><label for="velocity-max">Máximo (Hz)</label><input id="velocity-max" name="velocity_max" type="number" min="0.01" step="any" value="1000"></div></div>
+      <label for="health-reference">Critério do status de saúde</label><select id="health-reference" name="health_reference"><option value="orientative">Referência orientativa: 2,8 / 7,1 / 18 mm/s</option><option value="none">Sem classificação — comparar linha de base</option></select><small>Os limites de referência não substituem os critérios específicos da máquina ou uma avaliação normativa.</small>
       <label class="checkbox"><input type="checkbox" name="tsa" id="tsa"> Aplicar média síncrona (TSA)</label><small>TSA exige RPM estável informado ou tacômetro. Os indicadores globais continuam usando o sinal original sem offset.</small>
     </details>
     <button type="submit" class="primary" id="analyze-button">Analisar sinal <span aria-hidden="true">↗</span></button>
@@ -56,12 +57,45 @@
     <div class="features"><div><strong>Espectro de frequência</strong><p>FFT com janela Hann e amplitudes corrigidas.</p></div><div><strong>Indicadores medidos</strong><p>RMS, curtose, fator de crista e velocidade integrada.</p></div><div><strong>Referência mecânica</strong><p>Harmônicos, envelope e frequências de rolamento.</p></div></div>
   </div>
   <div id="results" hidden>
-    <div id="result-overview" class="result-overview"></div>
-    <div class="tabs" role="tablist" aria-label="Resultados"><button role="tab" id="tab-indicators" aria-selected="true" aria-controls="panel-indicators" data-panel="indicators">Diagnóstico automático</button><button role="tab" id="tab-spectrum" aria-selected="false" aria-controls="panel-spectrum" data-panel="spectrum" tabindex="-1">FFT e harmônicos</button><button role="tab" id="tab-wave" aria-selected="false" aria-controls="panel-wave" data-panel="wave" tabindex="-1">Sinal no tempo</button><button role="tab" id="tab-bearing" aria-selected="false" aria-controls="panel-bearing" data-panel="bearing" tabindex="-1">Rolamentos</button></div>
-    <div class="panel" id="panel-spectrum" role="tabpanel" aria-labelledby="tab-spectrum" hidden><div class="chart-heading"><div><h2>Espectro de aceleração</h2><p>Cada pico mostra uma frequência presente na vibração. As linhas verticais marcam os múltiplos da rotação.</p></div><span class="tag">FFT · Hann</span></div><div id="spectrum-chart" class="chart"></div><div class="two-columns"><div class="info-block"><h3>Componentes principais</h3><div id="peaks-table"></div></div><div class="info-block"><h3>Referência de rotação</h3><div id="rotation-info"></div><p class="muted">1X é a frequência de rotação; 2X é o dobro; 3X é o triplo. Esses padrões ajudam a levantar hipóteses de falha.</p></div></div></div>
-    <div class="panel" id="panel-wave" role="tabpanel" aria-labelledby="tab-wave" hidden><div class="chart-heading"><div><h2>Forma de onda do ensaio</h2><p id="tsa-info">Original e sinal sem offset</p></div></div><div id="wave-chart" class="chart"></div><p class="footnote">A visualização preserva extremos por intervalo. Métricas e FFT usam todas as amostras, sem redução.</p></div>
-    <div class="panel" id="panel-bearing" role="tabpanel" aria-labelledby="tab-bearing" hidden><div class="chart-heading"><div><h2>Espectro do envelope</h2><p>Hilbert · Banda de demodulação de 0,1 fs a 0,45 fs</p></div></div><div id="envelope-chart" class="chart"></div><div id="bearing-info" class="info-block"></div><p class="footnote">Frequências características dependem da geometria, rotação e escorregamento. Coincidência de pico isolada não confirma defeito.</p></div>
-    <div class="panel diagnosis-panel" id="panel-indicators" role="tabpanel" aria-labelledby="tab-indicators"><div class="diagnosis-intro"><div><h2>Diagnóstico Automático</h2><p>O que o sinal sugere e o que verificar na máquina.</p></div><span class="tag">Análise por evidências</span></div><div id="diagnostics"></div><div class="guide-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg><p><strong>Como interpretar:</strong> um indício é uma hipótese para investigar. Combine os padrões do sinal com inspeção, direção da medição, fase e histórico do equipamento.</p></div><h2 class="metric-heading">Indicadores do ensaio</h2><p class="muted">Valores medidos para comparar com a linha de base da sua máquina.</p><div id="metrics" class="metrics"></div><details class="technical-details"><summary>Dados da aquisição e limitações</summary><div id="measurement-strip" class="measurement-strip"></div><div id="warnings" class="warnings" hidden></div><div class="info-block"><h3>Avaliação da condição</h3><p id="severity-info"></p><p id="velocity-info"></p></div></details></div>
+    <div class="tabs result-tabs" role="tablist" aria-label="Resultados">
+      <button role="tab" id="tab-indicators" aria-selected="true" aria-controls="panel-indicators" data-panel="indicators">Diagnóstico Geral</button>
+      <button role="tab" id="tab-spectrum" aria-selected="false" aria-controls="panel-spectrum" data-panel="spectrum" tabindex="-1">Gráfico de Defeitos</button>
+      <button role="tab" id="tab-wave" aria-selected="false" aria-controls="panel-wave" data-panel="wave" tabindex="-1">Gráficos de Análise</button>
+      <button role="tab" id="tab-bearing" aria-selected="false" aria-controls="panel-bearing" data-panel="bearing" tabindex="-1">Análise de Rolamentos</button>
+      <button role="tab" id="tab-health" aria-selected="false" aria-controls="panel-health" data-panel="health" tabindex="-1">Status de Saúde</button>
+    </div>
+    <div class="panel diagnosis-panel" id="panel-indicators" role="tabpanel" aria-labelledby="tab-indicators">
+      <div id="result-overview" class="reference-summary"></div>
+      <div class="diagnosis-intro"><div><h2>Diagnóstico Automático</h2><p>Possíveis problemas identificados no sinal e verificações recomendadas.</p></div><span class="tag">Análise por evidências</span></div>
+      <div id="diagnostics"></div>
+      <div class="guide-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg><p><strong>Como interpretar:</strong> combine os indícios com inspeção, fase e histórico da máquina. Um RMS global baixo não exclui um problema localizado.</p></div>
+      <details class="technical-details"><summary>Dados da aquisição e observações</summary><div id="measurement-strip" class="measurement-strip"></div><div id="warnings" class="warnings" hidden></div></details>
+    </div>
+    <div class="panel" id="panel-spectrum" role="tabpanel" aria-labelledby="tab-spectrum" hidden>
+      <article class="analysis-card defect-card"><div class="analysis-card-heading"><h2>Análise Espectral</h2><p>FFT processada com picos destacados, marcadores de rotação e zonas de referência.</p></div><div id="spectrum-chart" class="chart chart-large"></div><p class="chart-description">1X é a frequência de rotação; 2X é o dobro. As zonas coloridas ajudam a localizar padrões. São referências de investigação e respeitam o limite de Nyquist do ensaio.</p><p id="defect-processing-note" class="footnote"></p></article>
+      <details class="zone-reference"><summary>Referência das zonas de análise</summary><div id="zone-legend" class="zone-legend"></div></details>
+      <div class="two-columns"><div class="info-block"><h3>Picos principais do sinal processado</h3><div id="peaks-table"></div></div><div class="info-block"><h3>Rotação e amostragem</h3><div id="rotation-info"></div><p class="muted">Confirme a referência de rotação antes de atribuir uma causa aos picos.</p></div></div>
+    </div>
+    <div class="panel analysis-stack" id="panel-wave" role="tabpanel" aria-labelledby="tab-wave" hidden>
+      <article class="analysis-card"><h2>Forma de Onda do Sinal Bruto</h2><div id="raw-wave-chart" class="chart"></div><p class="chart-description">Sinal original do arquivo, convertido para m/s². Mostra impactos, ruídos e variações antes do processamento.</p></article>
+      <article class="analysis-card"><h2>FFT do Sinal Bruto</h2><div id="raw-fft-chart" class="chart"></div><p class="chart-description">Espectro do sinal original, sem remoção de média, janela ou TSA. A componente em 0 Hz representa o offset.</p></article>
+      <article class="analysis-card"><h2 id="processed-wave-title">Forma de Onda Processada</h2><div id="processed-wave-chart" class="chart"></div><p id="tsa-info" class="chart-description"></p></article>
+      <article class="analysis-card"><h2 id="processed-fft-title">FFT Processada</h2><div id="processed-fft-chart" class="chart"></div><p class="chart-description">Espectro do sinal processado, com janela Hann e correção de amplitude. Os diamantes indicam os picos detectados.</p></article>
+      <article class="analysis-card"><h2>Tendência RMS Móvel</h2><div id="rms-chart" class="chart chart-rms"></div><p id="rolling-info" class="chart-description"></p></article>
+      <p class="footnote">Os gráficos preservam extremos ou picos por intervalo quando a visualização é reduzida. Os cálculos usam todas as amostras do ensaio.</p>
+    </div>
+    <div class="panel" id="panel-bearing" role="tabpanel" aria-labelledby="tab-bearing" hidden>
+      <article class="analysis-card"><h2>Espectro do Envelope</h2><div id="envelope-chart" class="chart chart-large"></div><p class="chart-description">Destaca modulações que podem ajudar na investigação de impactos e rolamentos. Usa Hilbert após filtragem entre 0,1 fs e 0,45 fs.</p></article>
+      <div id="bearing-info" class="info-block"></div><p class="footnote">BPFO, BPFI, BSF e FTF dependem da geometria e da rotação. Coincidência de frequência isolada não confirma defeito.</p>
+    </div>
+    <div class="panel" id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden>
+      <div id="health-card" class="health-card"><span class="health-eyebrow">Status de Saúde</span><h2 id="health-label"></h2><strong id="health-rms"></strong><p id="health-caption"></p><div id="polar-chart" class="polar-chart"></div><p id="polar-caption"></p></div>
+      <p id="severity-info" class="health-reference-note"></p>
+      <h2 class="metric-heading">Métricas do Sinal</h2><div id="metrics" class="metrics" hidden></div>
+      <div class="table-wrap"><table class="explanation-table"><thead><tr><th>Indicador</th><th>Valor</th><th>Descrição</th></tr></thead><tbody id="metrics-table"></tbody></table></div>
+      <h2 class="metric-heading spaced-heading" id="bands-title">Faixas de Análise</h2><div class="table-wrap"><table class="explanation-table"><thead><tr><th>Defeito / referência</th><th>Frequência central</th><th>Faixa observável</th><th>Observação</th></tr></thead><tbody id="bands-table"></tbody></table></div>
+      <p id="velocity-info" class="footnote"></p>
+    </div>
   </div>
 </section>
 </main>

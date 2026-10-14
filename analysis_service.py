@@ -2,13 +2,14 @@
 from datetime import datetime, timezone
 import uuid
 import numpy as np
+from scipy.signal import find_peaks
 from analise_vibracoes import (
     remover_offset, aplicar_janela, calcular_fft, calcular_metricas, detectar_rpm_hibrido,
     aceleracao_para_velocidade, media_sincrona_por_volta, envelope_rolamento,
     diagnosticar_por_scores, bearing_frequencies,
 )
 
-VERSION = '2.0.0'
+VERSION = '2.1.0'
 
 
 def _plot(x,y,limit=2000,peaks=False):
@@ -26,7 +27,7 @@ def _plot(x,y,limit=2000,peaks=False):
     return {'x':np.asarray(x)[idx].tolist(),'y':np.asarray(y)[idx].tolist()}
 
 
-def analyze_measurement(m,rpm=None,bearing=None,teeth=0,tsa=False,velocity_min=10.,velocity_max=1000.):
+def analyze_measurement(m,rpm=None,bearing=None,teeth=0,tsa=False,velocity_min=10.,velocity_max=1000.,health_reference=False):
     fs = float(m['fs'])
     x = remover_offset(m['signal'])
     warnings = list(m['warnings'])
@@ -68,13 +69,21 @@ def analyze_measurement(m,rpm=None,bearing=None,teeth=0,tsa=False,velocity_min=1
     windowed,gain = aplicar_janela(x)
     f,a,phase = calcular_fft(windowed,fs,gain)
     metrics = calcular_metricas(x)
+    if not np.any((f >= velocity_min) & (f <= upper) & (f < fs/2)):
+        raise ValueError('Banda de velocidade sem frequências disponíveis; aumente o tempo do ensaio para melhorar a resolução ou ajuste a banda.')
     velocity = aceleracao_para_velocidade(x,fs,velocity_min,upper)
     metrics['velocity_rms_mm_s'] = float(np.sqrt(np.mean(velocity**2))*1000)
     fr = rotation['rpm']/60
-    idx = int(np.argmin(abs(f-fr))) if fr else 0
     resolved = fr >= 4*fs/len(x)
-    metrics['amplitude_1x'] = float(a[idx]) if fr and resolved else None
-    metrics['phase_1x_deg'] = float(np.rad2deg(phase[idx])) if fr and resolved else None
+    metrics['amplitude_1x'] = None
+    metrics['phase_1x_deg'] = None
+    if fr and resolved:
+        # Fit the exact reference frequency, with an independent constant term.
+        angle = 2*np.pi*fr*np.arange(len(x))/fs
+        design = np.column_stack((np.cos(angle),np.sin(angle),np.ones(len(x))))
+        cosine,sine,_ = np.linalg.lstsq(design,x,rcond=None)[0]
+        metrics['amplitude_1x'] = float(np.hypot(cosine,sine))
+        metrics['phase_1x_deg'] = float(np.rad2deg(np.arctan2(-sine,cosine)))
     if fr and not resolved:
         warnings.append('Ensaio curto demais para medir 1X de forma resolvida; amplitude e fase de 1X indisponíveis.')
     diag = diagnosticar_por_scores(f,a,fr)
@@ -90,10 +99,48 @@ def analyze_measurement(m,rpm=None,bearing=None,teeth=0,tsa=False,velocity_min=1
             warnings.append(f'{name} ({value:.1f} Hz) fora da faixa de Nyquist; não é observável neste ensaio.')
     if len(x)/fs < 1:
         warnings.append('Ensaio menor que 1 segundo; a resolução espectral pode ser insuficiente.')
+    raw_f,raw_a,_ = calcular_fft(m['signal'],fs)
+    processed_window,processed_gain = aplicar_janela(processed)
+    processed_f,processed_a,_ = calcular_fft(processed_window,fs,processed_gain)
+    window_samples = min(len(x),max(2,int(round(fs*.1))))
+    # Prefix/suffix sums per block avoid subtracting large, almost equal totals.
+    padding = (-len(x)) % window_samples
+    blocks = np.pad(x*x,(0,padding)).reshape(-1,window_samples)
+    prefix = np.cumsum(blocks,axis=1).ravel()
+    suffix = np.cumsum(blocks[:,::-1],axis=1)[:,::-1].ravel()
+    starts = np.arange(len(x)-window_samples+1)
+    ends = starts+window_samples-1
+    totals = np.where(starts % window_samples == 0,prefix[ends],suffix[starts]+prefix[ends])
+    rolling = np.sqrt(totals/window_samples)
+    def peak_list(freq,amp):
+        indexes=find_peaks(amp,prominence=max(float(amp.max())*.02,1e-12))[0]
+        return [{'hz':float(freq[i]),'amplitude':float(amp[i])} for i in sorted(indexes,key=lambda i:amp[i],reverse=True)[:12]]
+    bands=[]
+    def band(kind,label,start,end,center,description):
+        clipped_start,clipped_end=max(0.,start),min(fs/2,end)
+        if clipped_start<clipped_end:
+            bands.append({'kind':kind,'label':label,'start_hz':clipped_start,'end_hz':clipped_end,'center_hz':center,
+                          'truncated':end>fs/2,'description':description})
+    if fr:
+        band('unbalance','Desbalanceamento · 1X',.9*fr,1.1*fr,fr,'Componente síncrona de rotação; confirmar com fase e inspeção.')
+        band('misalignment','Desalinhamento · 2X–3X',1.8*fr,3.2*fr,2.5*fr,'Harmônicos de rotação que podem se relacionar ao alinhamento.')
+        band('looseness','Folga mecânica · 3X–10X',3*fr,10*fr,6*fr,'Múltiplos harmônicos; confirmar fixações e folgas.')
+        if gmf:
+            band('gear','Engrenamento · GMF',gmf-fr*.1,gmf+fr*.1,gmf,'Frequência calculada pelo número de dentes e rotação.')
+        for key,value in bfreq.items():
+            band('bearing',f'Rolamento · {key}',value-fr*.05,value+fr*.05,value,'Referência geométrica; investigar no envelope.')
+    severity={'label':'Sem classificação','level':'unclassified','description':'Selecione um critério de referência para comparar o RMS de velocidade. A condição real depende da máquina, montagem e operação.'}
+    if health_reference:
+        limits=[2.8,7.1,18.]
+        level=int(np.searchsorted(limits,metrics['velocity_rms_mm_s'],side='right'))
+        severity={'label':['Normal','Leve','Moderado','Severo'][level],'level':['normal','mild','moderate','severe'][level],
+                  'thresholds_mm_s':limits,'description':'Comparação orientativa com limites de 2,8 / 7,1 / 18 mm/s; não é classificação normativa. Confirme se esses limites e a banda são adequados à máquina.'}
     return {'id':str(uuid.uuid4()),'version':VERSION,'created_at':datetime.now(timezone.utc).isoformat(),
             'measurement':{'samples':len(x),'fs':fs,'fs_source':m['fs_source'],'duration_s':len(x)/fs,'resolution_hz':fs/len(x),'nyquist_hz':fs/2,'signal_column':m.get('signal_column'),'unit':'m/s²'},
             'rotation':rotation,'metrics':metrics,'diagnostics':diag,'warnings':warnings,'tsa':tsa_status,
             'bearing_frequencies':bfreq,'gear_mesh_hz':gmf,'velocity_band_hz':[velocity_min,upper],
-            'severity':{'label':'Comparar com linha de base','description':'A classificação de condição depende da máquina, montagem e critério de avaliação. Não há classificação normativa automática.'},
-            'plots':{'raw':_plot(m['time'],m['signal']),'processed':_plot(m['time'],processed),'spectrum':_plot(f,a,peaks=True),'envelope':_plot(ef,ea,peaks=True)},
-            'peaks':[{'hz':float(f[i]),'amplitude':float(a[i])} for i in sorted(__import__('scipy').signal.find_peaks(a,prominence=max(float(a.max())*.02,1e-12))[0],key=lambda i:a[i],reverse=True)[:12]]}
+            'severity':severity,'analysis_bands':bands,'rolling_window_samples':window_samples,
+            'plots':{'raw':_plot(m['time'],m['signal']),'processed':_plot(m['time'],processed),'spectrum':_plot(f,a,peaks=True),
+                     'raw_spectrum':_plot(raw_f,raw_a,peaks=True),'processed_spectrum':_plot(processed_f,processed_a,peaks=True),
+                     'rolling_rms':_plot(m['time'][window_samples-1:],rolling),'envelope':_plot(ef,ea,peaks=True)},
+            'processed_peaks':peak_list(processed_f,processed_a),'peaks':peak_list(f,a)}

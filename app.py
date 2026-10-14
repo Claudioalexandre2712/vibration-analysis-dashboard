@@ -78,7 +78,7 @@ def create_app(test_config=None):
                 raise ValueError('Preencha todos os quatro parâmetros de rolamento ou deixe todos vazios.')
         else:
             geometry=None
-        result=analyze_measurement(m,rpm=number('rpm_manual'),bearing=geometry,teeth=number('num_dentes',0),tsa=request.form.get('tsa')=='on',velocity_min=number('velocity_min',10),velocity_max=number('velocity_max',1000))
+        result=analyze_measurement(m,rpm=number('rpm_manual'),bearing=geometry,teeth=number('num_dentes',0),tsa=request.form.get('tsa')=='on',velocity_min=number('velocity_min',10),velocity_max=number('velocity_max',1000),health_reference=request.form.get('health_reference')=='orientative')
         result['filename']=name
         result['machine']=request.form.get('machine','').strip()[:120]
         return jsonify(result)

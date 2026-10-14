@@ -129,12 +129,11 @@ function startApplication() {
     $('empty-state').hidden=true;$('results').hidden=false;$('export-result').hidden=false;
     $('result-subtitle').textContent=`${r.filename}${r.machine?' · '+r.machine:''}`;
     $('workspace-title').textContent='Resultado da análise';
-    const findings=r.diagnostics.filter(d=>!['SEM_INDICIO','RESOLUCAO','indeterminado'].includes(d.tipo)).length;
-    const overview=node('div',null,'overview-message');const overviewIcon=node('div',null,'overview-icon');overviewIcon.append(icon(findings?'tool':'info'));
-    const overviewText=node('div');overviewText.append(node('strong',findings?`${findings} ${findings===1?'padrão merece':'padrões merecem'} sua atenção`:'Confira a interpretação do ensaio'),node('p','Leia os possíveis problemas abaixo e use as verificações sugeridas para orientar a inspeção.'));
-    overview.append(overviewIcon,overviewText);
-    const rotationSummary=node('div',null,'overview-rotation');rotationSummary.append(node('span','Rotação utilizada'),node('strong',number(r.rotation.rpm,1)+' RPM'),node('small',r.rotation.method==='Estimativa espectral'?'RPM estimado · confirme a rotação':r.rotation.method));
-    $('result-overview').replaceChildren(overview,rotationSummary);
+    const reference=(label,value,description,kind)=>{const card=node('div',null,'reference-item');const symbol=node('span',null,'reference-icon');symbol.append(icon(kind));const content=node('div');content.append(node('span',label),node('strong',value),node('small',description));card.append(symbol,content);return card;};
+    $('result-overview').replaceChildren(
+      reference('Rotação utilizada',number(r.rotation.rpm,1)+' RPM',r.rotation.method==='Estimativa espectral'?'Estimativa espectral · confirme a rotação':r.rotation.method,'rotor'),
+      reference('Taxa de amostragem',number(r.measurement.fs,3)+' Hz',r.measurement.fs_source,'signal')
+    );
     const info=r.measurement;
     $('measurement-strip').replaceChildren();
     for(const [label,value]of [['Amostras',number(info.samples,0)],['Duração',number(info.duration_s,3)+' s'],['Amostragem',number(info.fs,3)+' Hz'],['Resolução',number(info.resolution_hz,3)+' Hz'],['Nyquist',number(info.nyquist_hz,2)+' Hz']]) {
@@ -150,9 +149,14 @@ function startApplication() {
       const el=node('div',null,'metric');const strong=node('strong',number(value));strong.append(node('em',unit));el.append(node('span',label),strong,node('small',description));$('metrics').append(el);
     }
     $('rotation-info').replaceChildren(node('div',number(r.rotation.rpm,1)+' RPM','rotation-value'),node('p',r.rotation.method+' · '+r.rotation.confidence),node('p','Amostragem: '+info.fs_source));
-    $('tsa-info').textContent=r.tsa==='Não aplicada'?'Original e sinal sem offset; TSA não aplicada.':r.tsa;
+    const hasTsa=r.tsa!=='Não aplicada';
+    $('processed-wave-title').textContent=hasTsa?'Forma de Onda Processada (TSA)':'Forma de Onda Processada (sem offset)';
+    $('processed-fft-title').textContent=hasTsa?'FFT Processada (TSA)':'FFT Processada (sem offset)';
+    $('tsa-info').textContent=hasTsa?'Sinal após a média síncrona por volta. Reduz componentes não síncronas com a referência informada.':'Sinal com média removida. A TSA não foi aplicada; marque a opção e informe RPM estável ou tacômetro para executá-la.';
+    $('defect-processing-note').textContent=hasTsa?'Este gráfico usa a FFT após TSA. O diagnóstico geral e as métricas globais usam o sinal sem offset antes da TSA.':'Este gráfico usa o sinal sem offset com janela Hann. A TSA não foi aplicada neste ensaio.';
+    $('rolling-info').textContent=`RMS medido em janelas de ${r.rolling_window_samples} amostras (${number(1000*r.rolling_window_samples/info.fs,1)} ms), no sinal sem offset. Mostra a variação do nível de vibração ao longo do tempo.`;
     const peakTable=node('table');const header=node('tr');header.append(node('th','Frequência (Hz)'),node('th','Amplitude (m/s²)'));peakTable.append(header);
-    for(const p of r.peaks.slice(0,6)){const row=node('tr');row.append(node('td',number(p.hz,2)),node('td',number(p.amplitude,5)));peakTable.append(row);}
+    for(const p of r.processed_peaks.slice(0,6)){const row=node('tr');row.append(node('td',number(p.hz,2)),node('td',number(p.amplitude,5)));peakTable.append(row);}
     $('peaks-table').replaceChildren(peakTable);
     $('diagnostics').replaceChildren();
     const order={FOLGA:0,DESALINHAMENTO:1,DESBALANCEAMENTO:2,ELETRICO:3};
@@ -168,22 +172,68 @@ function startApplication() {
       el.append(head,evidence,meaning,checks,confirm);$('diagnostics').append(el);
     }
     $('severity-info').textContent=r.severity.description;
-    $('velocity-info').textContent=`Integração espectral entre ${number(r.velocity_band_hz[0])} e ${number(r.velocity_band_hz[1])} Hz. Assimetria: ${number(r.metrics.skewness,4)}. Fase de 1X: ${number(r.metrics.phase_1x_deg,2)}°. Fase relativa ao início do registro, sem referência mecânica absoluta.`;
+    $('health-card').className='health-card health-'+r.severity.level;
+    $('health-label').textContent=r.severity.label;
+    $('health-rms').textContent=number(r.metrics.velocity_rms_mm_s,3)+' mm/s';
+    const healthMessages={normal:'RMS abaixo do primeiro limite de referência.',mild:'RMS na faixa de atenção da referência.',moderate:'RMS elevado em relação aos limites de referência.',severe:'RMS acima do maior limite de referência.',unclassified:'Compare este valor com a linha de base do equipamento.'};
+    $('health-caption').textContent=healthMessages[r.severity.level]||healthMessages.unclassified;
+    $('polar-caption').textContent=r.metrics.amplitude_1x==null?'1X indisponível: confira RPM e resolução do ensaio.':`1X · Amplitude: ${number(r.metrics.amplitude_1x,4)} m/s² · Fase: ${number(r.metrics.phase_1x_deg,1)}°`;
+    $('velocity-info').textContent=`Velocidade integrada entre ${number(r.velocity_band_hz[0])} e ${number(r.velocity_band_hz[1])} Hz. A fase de 1X é relativa ao início do registro e não equivale a uma referência mecânica absoluta.`;
+    $('metrics-table').replaceChildren();
+    const metricRows=[
+      ['Nível médio de vibração (RMS)',number(r.metrics.rms,5)+' m/s²','Nível global de aceleração do sinal sem offset. Compare com a mesma condição de operação.'],
+      ['Velocidade RMS',number(r.metrics.velocity_rms_mm_s,4)+' mm/s','Velocidade calculada por integração na banda declarada. Usada para a comparação orientativa de saúde.'],
+      ['Pico de aceleração',number(r.metrics.peak,5)+' m/s²','Maior amplitude absoluta do sinal sem offset. Ajuda a identificar eventos intensos.'],
+      ['Fator de crista',number(r.metrics.crest_factor,3),'Relação entre pico e RMS. Valores elevados podem indicar impactos ou eventos transitórios.'],
+      ['Índice de achatamento (Curtose)',number(r.metrics.kurtosis,3),'Curtose de Pearson calculada no ensaio. Uma distribuição gaussiana tem referência 3; impactos podem elevar o valor.'],
+      ['Índice de assimetria (Skewness)',number(r.metrics.skewness,4),'Descreve a assimetria da distribuição de amplitudes. Próximo de zero indica distribuição mais simétrica.']
+    ];
+    for(const row of metricRows){const tr=node('tr');row.forEach(value=>tr.append(node('td',value)));$('metrics-table').append(tr);}
+    $('bands-title').textContent='Faixas de Análise para '+number(r.rotation.rpm,0)+' RPM';
+    $('bands-table').replaceChildren();$('zone-legend').replaceChildren();
+    for(const band of r.analysis_bands){
+      const tr=node('tr',null,'band-row band-'+band.kind);
+      for(const value of [band.label,number(band.center_hz,2)+' Hz',number(band.start_hz,2)+'–'+number(band.end_hz,2)+' Hz',band.description+(band.truncated?' Faixa limitada por Nyquist.':'')])tr.append(node('td',value));
+      $('bands-table').append(tr);
+      const legend=node('div',null,'zone-item band-'+band.kind);legend.append(node('strong',band.label),node('span',number(band.start_hz,1)+'–'+number(band.end_hz,1)+' Hz'));$('zone-legend').append(legend);
+    }
+    if(!r.gear_mesh_hz){const tr=node('tr');['Engrenagens (GMF)','Não calculada','Informe número de dentes','A faixa depende da engrenagem real; não é presumida.'].forEach(v=>tr.append(node('td',v)));$('bands-table').append(tr);}
+    else if(r.gear_mesh_hz>=info.nyquist_hz){const tr=node('tr');['Engrenagens (GMF)',number(r.gear_mesh_hz,1)+' Hz','Fora de Nyquist','A aquisição atual não observa esta referência.'].forEach(v=>tr.append(node('td',v)));$('bands-table').append(tr);}
+    if(!Object.keys(r.bearing_frequencies).length){const tr=node('tr');['Rolamentos','Não calculadas','Informe geometria','BPFO, BPFI, BSF e FTF dependem do rolamento e da rotação.'].forEach(v=>tr.append(node('td',v)));$('bands-table').append(tr);}
     $('bearing-info').replaceChildren(node('h3','Frequências de referência'));
     const frequencies={...r.bearing_frequencies};if(r.gear_mesh_hz)frequencies.GMF=r.gear_mesh_hz;
     if(!Object.keys(frequencies).length)$('bearing-info').append(node('p','Informe geometria de rolamento ou número de dentes para calcular frequências de referência. O envelope pode ser explorado sem esses parâmetros.'));
     for(const [key,val]of Object.entries(frequencies))$('bearing-info').append(node('p',`${key}: ${number(val,2)} Hz${val>=info.nyquist_hz?' · fora de Nyquist':''}`));
     selectPanel('indicators');
   }
+  const bandColors={unbalance:'rgba(208,65,78,.10)',misalignment:'rgba(44,129,195,.10)',looseness:'rgba(222,161,48,.13)',gear:'rgba(49,153,109,.10)',bearing:'rgba(121,93,172,.10)'};
+  function drawSpectrum(id,data,peaks,r,withBands=true) {
+    const fr=r.rotation.rpm/60;
+    const shapes=withBands?r.analysis_bands.map(b=>({type:'rect',x0:b.start_hz,x1:b.end_hz,xref:'x',y0:0,y1:1,yref:'paper',fillcolor:bandColors[b.kind],line:{width:0},layer:'below'})):[];
+    const annotations=[];
+    for(const h of [1,2])if(fr&&h*fr<r.measurement.nyquist_hz){shapes.push({type:'line',x0:h*fr,x1:h*fr,y0:0,y1:1,yref:'paper',line:{color:h===1?'#c54050':'#337ab5',width:1,dash:'dot'}});annotations.push({x:h*fr,y:h===1?.95:.84,yref:'paper',text:h+'X',showarrow:false,font:{color:h===1?'#c54050':'#337ab5',size:10},bgcolor:'#fff',bordercolor:h===1?'#c54050':'#337ab5',borderpad:2});}
+    plot(id,[line(data,'FFT Processada','#204f79'),{x:peaks.map(p=>p.hz),y:peaks.map(p=>p.amplitude),type:'scatter',mode:'markers',name:'Picos detectados',marker:{color:'#bb5b2c',size:7,symbol:'diamond'}}],'Frequência (Hz)','Amplitude de pico (m/s²)',{shapes,annotations,xaxis:{title:{text:'Frequência (Hz)'},range:[0,r.measurement.nyquist_hz],gridcolor:'#e5ebef',zeroline:false},showlegend:true,legend:{orientation:'h',x:0,y:1.12,font:{size:10}}});
+  }
   function drawPanel(name) {
     if(!currentResult)return;
-    const r=currentResult,fr=r.rotation.rpm/60;
-    const shapes=fr?[1,2,3,4,5].filter(h=>h*fr<r.measurement.nyquist_hz).map(h=>({type:'line',x0:fr*h,x1:fr*h,y0:0,y1:1,yref:'paper',line:{color:'#b8d5d4',width:1,dash:'dot'}})):[];
-    if(name==='spectrum')plot('spectrum-chart',[line(r.plots.spectrum,'FFT')],'Frequência (Hz)','Amplitude de pico (m/s²)',{shapes});
-    if(name==='wave')plot('wave-chart',[line(r.plots.raw,'Original','#a6b6c0'),line(r.plots.processed,r.tsa==='Não aplicada'?'Sem offset':'TSA')],'Tempo (s)','Aceleração (m/s²)');
+    const r=currentResult;
+    if(name==='spectrum')drawSpectrum('spectrum-chart',r.plots.processed_spectrum,r.processed_peaks,r);
+    if(name==='wave') {
+      plot('raw-wave-chart',[line(r.plots.raw,'Sinal bruto','#204f79')],'Tempo (s)','Aceleração (m/s²)');
+      plot('raw-fft-chart',[line(r.plots.raw_spectrum,'FFT bruta','#c86421')],'Frequência (Hz)','Amplitude de pico (m/s²)');
+      plot('processed-wave-chart',[line(r.plots.processed,r.tsa==='Não aplicada'?'Sem offset':'TSA','#078a7f')],'Tempo (s)','Aceleração (m/s²)');
+      drawSpectrum('processed-fft-chart',r.plots.processed_spectrum,r.processed_peaks,r);
+      plot('rms-chart',[line(r.plots.rolling_rms,'RMS móvel','#6151cf')],'Tempo (s)','RMS de aceleração (m/s²)');
+    }
     if(name==='bearing') {
       const marks=Object.entries(r.bearing_frequencies).filter(([,v])=>v<r.measurement.nyquist_hz);
-      plot('envelope-chart',[line(r.plots.envelope,'Envelope','#bb5b2c')],'Frequência (Hz)','Amplitude do envelope (m/s²)',{shapes:marks.map(([,v])=>({type:'line',x0:v,x1:v,y0:0,y1:1,yref:'paper',line:{color:'#b8cfd7',width:1,dash:'dot'}})),annotations:marks.map(([key,v],i)=>({x:v,y:1-i*.08,yref:'paper',text:key,showarrow:false,font:{size:10}}))});
+      plot('envelope-chart',[line(r.plots.envelope,'Envelope','#078a7f')],'Frequência (Hz)','Amplitude do envelope (m/s²)',{shapes:marks.map(([,v])=>({type:'line',x0:v,x1:v,y0:0,y1:1,yref:'paper',line:{color:'#926ca5',width:1,dash:'dot'}})),annotations:marks.map(([key,v],i)=>({x:v,y:1-i*.08,yref:'paper',text:key,showarrow:false,font:{size:10},bgcolor:'#fff'}))});
+    }
+    if(name==='health') {
+      if(typeof Plotly==='undefined')return;
+      if(r.metrics.amplitude_1x==null){Plotly.purge('polar-chart');$('polar-chart').hidden=true;return;}
+      $('polar-chart').hidden=false;
+      Plotly.newPlot('polar-chart',[{type:'scatterpolar',r:[r.metrics.amplitude_1x],theta:[r.metrics.phase_1x_deg],mode:'markers',name:'1X',marker:{size:13,color:'#245594'}}],{margin:{l:32,r:32,t:25,b:25},showlegend:false,paper_bgcolor:'#fff',font:{family:'Segoe UI',size:9,color:'#526b7b'},polar:{radialaxis:{range:[0,Math.max(r.metrics.amplitude_1x*1.6,.001)],tickformat:'.3g',nticks:5},angularaxis:{rotation:0,direction:'counterclockwise'}}},{responsive:true,displayModeBar:false});
     }
   }
   function selectPanel(name) {
