@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Explore sinais de vibração, espectros e indicadores de máquinas rotativas.">
+  <title>Vibrações — Análise e diagnóstico de vibrações</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/vendor/plotly.min.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#workspace">Ir para os resultados</a>
+<header class="topbar">
+  <a href="/" class="brand"><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M1 18h7l4-12 7 25 5-18 4 5h7"/></svg><span>Vibrações<span class="brand-sub">Análise e diagnóstico de máquinas</span></span></a>
+  <nav aria-label="Navegação principal"><button class="nav active" id="nav-analysis" type="button">Analisar sinal</button><button class="nav" id="nav-history" type="button">Meu histórico <span id="history-count">0</span></button></nav>
+  <span class="version">Versão {{ version }}</span>
+</header>
+<div id="announcement" class="notice" role="status" aria-live="polite" hidden></div>
+<main id="analysis-view" class="layout">
+<aside class="settings" aria-label="Configuração do ensaio">
+  <div class="section-heading"><span class="step">1</span><h2>Seu ensaio</h2></div>
+  <form id="analysis-form">
+    <label class="upload" for="arquivo"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 21V4m-6 6 6-6 6 6M5 21v7h22v-7"/></svg><strong id="file-name">Selecionar arquivo CSV</strong><span id="file-info">Até 4 MB · 50 a 200.000 amostras</span><input type="file" name="arquivo" id="arquivo" accept=".csv,text/csv"></label>
+    <div class="examples"><span>Conheça com um sinal sintético</span><div><button type="button" data-example="normal">Seno</button><button type="button" data-example="harmonicos">Harmônicos</button><button type="button" data-example="impactos">Impactos</button></div></div>
+    <label for="machine">Equipamento / ponto de medição</label><input id="machine" name="machine" placeholder="Ex.: Motor 01 · Mancal horizontal" maxlength="120">
+    <details id="column-fields" hidden><summary>Conferir colunas detectadas</summary><small>Confira as sugestões; altere se necessário.</small>
+      <label for="signal-column">Coluna de aceleração</label><select id="signal-column" name="signal_column"></select>
+      <label for="time-column">Coluna de tempo em segundos</label><select id="time-column" name="time_column"></select>
+      <label for="tach-column">Tacômetro (um pulso por volta)</label><select id="tach-column" name="tach_column"></select>
+    </details>
+    <label for="unit">Unidade da aceleração</label><select id="unit" name="unit"><option value="m/s2">m/s²</option><option value="g">g (gravidade padrão)</option><option value="mm/s2">mm/s²</option></select>
+    <div class="section-heading separated"><span class="step">2</span><h2>Referência de análise</h2></div>
+    <label for="sampling-frequency">Amostragem (Hz)</label><input id="sampling-frequency" name="sampling_frequency" type="number" min="1" max="1000000" step="any" placeholder="Calcular pelo tempo do arquivo"><small>Sem coluna de tempo ou metadado, informe a taxa da aquisição.</small>
+    <label for="rpm-manual">Rotação medida (RPM)</label><input id="rpm-manual" name="rpm_manual" type="number" min="0.01" step="any" placeholder="Estimar pelo espectro"><small>Informe para usar uma referência medida. Estimativa espectral pode ser um harmônico.</small>
+    <details><summary>Rolamento, engrenagem e processamento</summary>
+      <div class="pair"><div><label for="n">Elementos rolantes</label><input id="n" name="n" type="number" min="2" max="100" step="1" placeholder="n"></div><div><label for="d">Diâmetro do elemento (mm)</label><input id="d" name="d" type="number" min="0.001" step="any" placeholder="d"></div></div>
+      <div class="pair"><div><label for="p">Diâmetro primitivo (mm)</label><input id="p" name="p" type="number" min="0.001" step="any" placeholder="D"></div><div><label for="theta">Ângulo de contato (°)</label><input id="theta" name="theta" type="number" min="0" max="90" step="any" placeholder="θ"></div></div>
+      <small>Preencha os quatro campos para calcular BPFO, BPFI, BSF e FTF.</small>
+      <label for="num-dentes">Dentes da engrenagem</label><input id="num-dentes" name="num_dentes" type="number" min="0" max="10000" step="1" placeholder="Opcional">
+      <div class="pair"><div><label for="velocity-min">Velocidade: mínimo (Hz)</label><input id="velocity-min" name="velocity_min" type="number" min="0.01" step="any" value="10"></div><div><label for="velocity-max">Máximo (Hz)</label><input id="velocity-max" name="velocity_max" type="number" min="0.01" step="any" value="1000"></div></div>
+      <label class="checkbox"><input type="checkbox" name="tsa" id="tsa"> Aplicar média síncrona (TSA)</label><small>TSA exige RPM estável informado ou tacômetro. Os indicadores globais continuam usando o sinal original sem offset.</small>
+    </details>
+    <button type="submit" class="primary" id="analyze-button">Analisar sinal <span aria-hidden="true">↗</span></button>
+    <p class="privacy">O arquivo é processado nesta requisição e não entra em um histórico público. Resumos ficam somente neste navegador.</p>
+  </form>
+</aside>
+<section class="workspace" id="workspace" tabindex="-1">
+  <div class="workspace-heading"><div><p class="kicker">Análise de máquinas rotativas</p><h1 id="workspace-title">Veja o que a vibração indica.</h1><p id="result-subtitle">Envie seu CSV para identificar padrões, entender as evidências e saber o que verificar.</p></div><button class="secondary" id="export-result" type="button" hidden>Exportar análise</button></div>
+  <div id="error" class="error" role="alert" hidden></div>
+  <div id="busy" class="busy" role="status" hidden><span class="spinner"></span><div><strong>Analisando seu ensaio</strong><p>Validando amostragem, calculando espectros e indicadores.</p></div></div>
+  <div id="empty-state" class="empty-state">
+    <div class="empty-title"><span class="signal-dot"></span><span>Seu sinal começa aqui</span></div>
+    <svg class="signal-art" viewBox="0 0 900 240" role="img" aria-label="Ilustração de uma onda de vibração"><defs><pattern id="grid" width="45" height="40" patternUnits="userSpaceOnUse"><path d="M45 0H0V40" fill="none" stroke="#dfe7eb" stroke-width="1"/></pattern></defs><rect width="900" height="240" fill="url(#grid)"/><path d="M0 120H80Q95 120 110 115T140 120Q150 160 160 120T180 120Q190 95 200 120T220 120Q240 175 260 120T300 120Q315 45 330 120T360 120Q380 205 400 120T440 120Q460 25 480 120T520 120Q535 180 550 120T580 120Q600 80 620 120T660 120Q680 140 700 120T740 120H900" fill="none" stroke="#147b80" stroke-width="2.5"/></svg>
+    <div class="empty-copy"><h2>Do arquivo ao diagnóstico, passo a passo.</h2><p>Selecione o CSV, confira a unidade e a rotação e clique em Analisar sinal. Primeiro você verá os possíveis problemas e o que inspecionar. Depois, explore os gráficos para entender cada evidência.</p></div>
+    <div class="features"><div><strong>Espectro de frequência</strong><p>FFT com janela Hann e amplitudes corrigidas.</p></div><div><strong>Indicadores medidos</strong><p>RMS, curtose, fator de crista e velocidade integrada.</p></div><div><strong>Referência mecânica</strong><p>Harmônicos, envelope e frequências de rolamento.</p></div></div>
+  </div>
+  <div id="results" hidden>
+    <div id="result-overview" class="result-overview"></div>
+    <div class="tabs" role="tablist" aria-label="Resultados"><button role="tab" id="tab-indicators" aria-selected="true" aria-controls="panel-indicators" data-panel="indicators">Diagnóstico automático</button><button role="tab" id="tab-spectrum" aria-selected="false" aria-controls="panel-spectrum" data-panel="spectrum" tabindex="-1">FFT e harmônicos</button><button role="tab" id="tab-wave" aria-selected="false" aria-controls="panel-wave" data-panel="wave" tabindex="-1">Sinal no tempo</button><button role="tab" id="tab-bearing" aria-selected="false" aria-controls="panel-bearing" data-panel="bearing" tabindex="-1">Rolamentos</button></div>
+    <div class="panel" id="panel-spectrum" role="tabpanel" aria-labelledby="tab-spectrum" hidden><div class="chart-heading"><div><h2>Espectro de aceleração</h2><p>Cada pico mostra uma frequência presente na vibração. As linhas verticais marcam os múltiplos da rotação.</p></div><span class="tag">FFT · Hann</span></div><div id="spectrum-chart" class="chart"></div><div class="two-columns"><div class="info-block"><h3>Componentes principais</h3><div id="peaks-table"></div></div><div class="info-block"><h3>Referência de rotação</h3><div id="rotation-info"></div><p class="muted">1X é a frequência de rotação; 2X é o dobro; 3X é o triplo. Esses padrões ajudam a levantar hipóteses de falha.</p></div></div></div>
+    <div class="panel" id="panel-wave" role="tabpanel" aria-labelledby="tab-wave" hidden><div class="chart-heading"><div><h2>Forma de onda do ensaio</h2><p id="tsa-info">Original e sinal sem offset</p></div></div><div id="wave-chart" class="chart"></div><p class="footnote">A visualização preserva extremos por intervalo. Métricas e FFT usam todas as amostras, sem redução.</p></div>
+    <div class="panel" id="panel-bearing" role="tabpanel" aria-labelledby="tab-bearing" hidden><div class="chart-heading"><div><h2>Espectro do envelope</h2><p>Hilbert · Banda de demodulação de 0,1 fs a 0,45 fs</p></div></div><div id="envelope-chart" class="chart"></div><div id="bearing-info" class="info-block"></div><p class="footnote">Frequências características dependem da geometria, rotação e escorregamento. Coincidência de pico isolada não confirma defeito.</p></div>
+    <div class="panel diagnosis-panel" id="panel-indicators" role="tabpanel" aria-labelledby="tab-indicators"><div class="diagnosis-intro"><div><h2>Diagnóstico Automático</h2><p>O que o sinal sugere e o que verificar na máquina.</p></div><span class="tag">Análise por evidências</span></div><div id="diagnostics"></div><div class="guide-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg><p><strong>Como interpretar:</strong> um indício é uma hipótese para investigar. Combine os padrões do sinal com inspeção, direção da medição, fase e histórico do equipamento.</p></div><h2 class="metric-heading">Indicadores do ensaio</h2><p class="muted">Valores medidos para comparar com a linha de base da sua máquina.</p><div id="metrics" class="metrics"></div><details class="technical-details"><summary>Dados da aquisição e limitações</summary><div id="measurement-strip" class="measurement-strip"></div><div id="warnings" class="warnings" hidden></div><div class="info-block"><h3>Avaliação da condição</h3><p id="severity-info"></p><p id="velocity-info"></p></div></details></div>
+  </div>
+</section>
+</main>
+<main id="history-view" class="history-view" hidden>
+  <div class="workspace-heading"><div><p class="kicker">Continuidade da medição</p><h1>Meu histórico</h1><p>Resumos salvos neste navegador. Exporte para guardar ou levar para outro dispositivo.</p></div><div class="history-actions"><button class="secondary" id="export-history">Exportar histórico</button><button class="secondary" id="import-history">Importar</button><input id="import-file" type="file" accept=".json" hidden><button class="danger-button" id="clear-history">Limpar</button></div></div>
+  <label for="machine-filter">Equipamento</label><select id="machine-filter"><option value="">Todos os equipamentos</option></select>
+  <p id="history-empty" class="muted">Nenhuma análise salva. Analise um sinal para começar.</p>
+  <div id="history-chart" class="chart" hidden></div><p class="footnote">Compare medições com a mesma unidade, banda de velocidade e condições de operação. Gráfico agrupa somente o equipamento selecionado.</p>
+  <div class="table-wrap"><table><thead><tr><th>Data</th><th>Equipamento</th><th>Arquivo</th><th>RPM</th><th>RMS (mm/s)</th><th>Banda (Hz)</th><th>Curtose</th></tr></thead><tbody id="history-body"></tbody></table></div>
+</main>
+<footer class="author-bar"><div class="author-identity"><svg class="author-mark" viewBox="0 0 48 48" aria-hidden="true"><rect x="1" y="1" width="46" height="46" rx="12"/><path d="M10 25h5l3-9 5 17 5-20 4 12h6"/></svg><div><span class="author-label">Criado e desenvolvido por</span><strong>Claudio Alexandre</strong><span class="author-product">Vibrações · {{ version }}</span></div></div><a class="author-email" href="mailto:claudioalexandreengmec@gmail.com"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span>claudioalexandreengmec@gmail.com</span></a><a class="author-source" href="https://github.com/Claudioalexandre2712/vibration-analysis-dashboard" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16"/></svg>Ver projeto</a></footer>
+</body></html>

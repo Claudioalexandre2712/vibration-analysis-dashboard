@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.venv*/
+.tools/
+.vercel/
+.pytest_cache/
+public/vendor/*.map
+*.db
+*.db-*
+
+.vercel
+.env*

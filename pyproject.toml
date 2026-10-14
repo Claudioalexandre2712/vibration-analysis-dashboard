@@ -1,0 +1,19 @@
+[project]
+name = "vibration-analysis-dashboard"
+version = "2.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "Flask==3.1.2",
+  "Werkzeug==3.1.9",
+  "Jinja2==3.1.6",
+  "numpy==2.2.6",
+  "scipy==1.15.3",
+  "pandas==2.2.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.vercel]
+entrypoint = "app:app"

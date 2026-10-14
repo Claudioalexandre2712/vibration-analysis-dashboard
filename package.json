@@ -1,0 +1,10 @@
+{
+  "name": "vibra-browser-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/test_frontend.cjs tests/test_form.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}
