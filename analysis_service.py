@@ -9,7 +9,7 @@ from analise_vibracoes import (
     diagnosticar_por_scores, bearing_frequencies,
 )
 
-VERSION = '2.2.0'
+VERSION = '2.2.1'
 
 
 def _plot(x,y,limit=2000,peaks=False):
@@ -120,7 +120,7 @@ def analyze_measurement(m,rpm=None,bearing=None,teeth=0,tsa=False,velocity_min=1
         clipped_start,clipped_end=max(0.,start),min(fs/2,end)
         if clipped_start<clipped_end:
             bands.append({'kind':kind,'label':label,'start_hz':clipped_start,'end_hz':clipped_end,'center_hz':center,
-                          'truncated':end>fs/2,'description':description})
+                          'truncated':bool(end>fs/2),'description':description})
     if fr:
         band('unbalance','Desbalanceamento · 1X',.9*fr,1.1*fr,fr,'Componente síncrona de rotação; confirmar com fase e inspeção.')
         band('misalignment','Desalinhamento · 2X–3X',1.8*fr,3.2*fr,2.5*fr,'Harmônicos de rotação que podem se relacionar ao alinhamento.')

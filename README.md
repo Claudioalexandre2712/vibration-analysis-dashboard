@@ -77,6 +77,20 @@ npm test
 
 Testes determinísticos cobrem importação, conflitos, unidades/referências, métricas conhecidas, TSA, geometria, rotas, erros, limites e coleta dos controles reais do formulário em DOM simulado. CI executa Python e Node. Aprovação desses testes não certifica acurácia de diagnóstico em máquinas reais.
 
+## Matriz de CSVs sintéticos
+
+`tests/synthetic_cases.py` define25 sinais e contratos esperados (incluindo entradas recusadas). `tests/test_synthetic_matrix.py` envia todos à API local e compara diagnósticos, métricas, picos, envelope e referências conhecidas.
+
+Para gerar os CSVs, manifesto de parâmetros, relatórios e ZIP:
+
+```powershell
+.\.venv\Scripts\python scripts/validate_synthetic_csv.py
+# Envia25 CSVs sintéticos ao domínio público; não usa autenticação:
+.\.venv\Scripts\python scripts/validate_synthetic_csv.py --target https://vibration-analysis-dashboard.vercel.app
+```
+
+Saída padrão: `../documentacao/testes-csv` e `../documentacao/testes-csv-vibracoes.zip`. O manifesto define parâmetros obrigatórios para reproduzir cada caso. Os casos de rolamento, GMF, alta frequência e pico não harmônico validam referências/representação, sem exigir causas de falha não demonstradas pelo sinal. Testes sintéticos não certificam diagnóstico de máquinas reais.
+
 ## Publicar no Vercel
 
 Projeto existente: `vibration-analysis-dashboard`, equipe `claudioalexandreclaudio427-3093s-projects`. Framework Flask; Python 3.12; entrada `app:app`. O Vercel serve `public/` diretamente e instala `requirements.txt`. O antigo arquivo com `builds`/`routes` foi substituído pela configuração nativa.

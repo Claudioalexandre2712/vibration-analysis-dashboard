@@ -1,6 +1,6 @@
 [project]
 name = "vibration-analysis-dashboard"
-version = "2.2.0"
+version = "2.2.1"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "Flask==3.1.2",
