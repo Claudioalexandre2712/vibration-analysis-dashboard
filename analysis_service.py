@@ -9,7 +9,7 @@ from analise_vibracoes import (
     diagnosticar_por_scores, bearing_frequencies,
 )
 
-VERSION = '2.1.0'
+VERSION = '2.2.0'
 
 
 def _plot(x,y,limit=2000,peaks=False):
@@ -129,6 +129,19 @@ def analyze_measurement(m,rpm=None,bearing=None,teeth=0,tsa=False,velocity_min=1
             band('gear','Engrenamento · GMF',gmf-fr*.1,gmf+fr*.1,gmf,'Frequência calculada pelo número de dentes e rotação.')
         for key,value in bfreq.items():
             band('bearing',f'Rolamento · {key}',value-fr*.05,value+fr*.05,value,'Referência geométrica; investigar no envelope.')
+    # Broad teaching regions; not computed bearing fault frequencies or diagnoses.
+    regions=[]
+    for kind,label,start,end,description in [
+        ('unbalance','Desbalanceamento',.8*fr,1.2*fr,'Investigue a componente 1X e confirme com fase e inspeção do rotor.'),
+        ('misalignment','Desalinhamento',1.8*fr,3.2*fr,'Observe 2X e 3X; compare direções axial e radial e confira o acoplamento.'),
+        ('looseness','Folga Mecânica',3*fr,10*fr,'Procure vários harmônicos juntos e inspecione fixações, mancais e base.'),
+        ('bearing','Rolamentos',10*fr,100*fr,'Região ampla para investigação. Defeitos específicos exigem envelope e frequências calculadas pela geometria.'),
+        ('lubrication','Lubrificação',100*fr,None,'Alta frequência: investigar atrito e impactos. Um pico nesta região não confirma falha de lubrificação.')
+    ]:
+        stop=min(end,fs/2) if end is not None else fs/2
+        regions.append({'kind':kind,'label':label,'start_hz':start,'end_hz':end,
+                        'observable':bool(fr and start<stop),'observed_end_hz':stop if start<stop else None,
+                        'description':description})
     severity={'label':'Sem classificação','level':'unclassified','description':'Selecione um critério de referência para comparar o RMS de velocidade. A condição real depende da máquina, montagem e operação.'}
     if health_reference:
         limits=[2.8,7.1,18.]
@@ -139,7 +152,7 @@ def analyze_measurement(m,rpm=None,bearing=None,teeth=0,tsa=False,velocity_min=1
             'measurement':{'samples':len(x),'fs':fs,'fs_source':m['fs_source'],'duration_s':len(x)/fs,'resolution_hz':fs/len(x),'nyquist_hz':fs/2,'signal_column':m.get('signal_column'),'unit':'m/s²'},
             'rotation':rotation,'metrics':metrics,'diagnostics':diag,'warnings':warnings,'tsa':tsa_status,
             'bearing_frequencies':bfreq,'gear_mesh_hz':gmf,'velocity_band_hz':[velocity_min,upper],
-            'severity':severity,'analysis_bands':bands,'rolling_window_samples':window_samples,
+            'severity':severity,'spectral_regions':regions,'analysis_bands':bands,'rolling_window_samples':window_samples,
             'plots':{'raw':_plot(m['time'],m['signal']),'processed':_plot(m['time'],processed),'spectrum':_plot(f,a,peaks=True),
                      'raw_spectrum':_plot(raw_f,raw_a,peaks=True),'processed_spectrum':_plot(processed_f,processed_a,peaks=True),
                      'rolling_rms':_plot(m['time'][window_samples-1:],rolling),'envelope':_plot(ef,ea,peaks=True)},

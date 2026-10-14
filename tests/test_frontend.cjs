@@ -13,3 +13,13 @@ test('histórico recusa datas e textos inválidos',()=>{
   assert.throws(()=>validateHistoryEntry({...row,created_at:'not-a-date'}));
   assert.throws(()=>validateHistoryEntry({...row,machine:'x'.repeat(121)}));
 });
+
+
+test('histórico novo preserva amplitude, condição e diagnósticos sem inventar registros legados',()=>{
+  const out=validateHistoryEntry({...row,amplitude_1x:.15,severity:'normal',diagnostics:['Possível folga']});
+  assert.equal(out.amplitude_1x,.15);assert.equal(out.severity,'normal');assert.deepEqual(out.diagnostics,['Possível folga']);
+  const old=validateHistoryEntry(row);assert.equal(old.amplitude_1x,null);assert.equal(old.severity,'unclassified');assert.deepEqual(old.diagnostics,[]);
+  assert.throws(()=>validateHistoryEntry({...row,amplitude_1x:-1}));
+  assert.throws(()=>validateHistoryEntry({...row,severity:'fake'}));
+  assert.throws(()=>validateHistoryEntry({...row,diagnostics:[{}]}));
+});

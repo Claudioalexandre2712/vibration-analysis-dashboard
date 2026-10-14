@@ -4,7 +4,9 @@ Aplicação web em português para explorar ensaios CSV de aceleração. FFT com
 
 ## Resultados em cinco abas
 
-Diagnóstico Geral; Gráfico de Defeitos (espectro com faixas e picos); Gráficos de Análise (onda e FFT brutas, onda e FFT processadas, RMS móvel); Análise de Rolamentos (envelope e referências geométricas); Status de Saúde (polar de 1X, métricas e tabela de faixas). A fase de 1X é ajustada na frequência exata da rotação e referida ao início do registro, sem referência física de chave de fase.
+Diagnóstico Geral; Gráfico de Defeitos (espectro com faixas e picos); Gráficos de Análise (onda e FFT brutas, onda e FFT processadas, RMS móvel); Análise de Rolamentos (envelope e referências geométricas); Status de Saúde (polar de 1X, métricas e tabela de faixas). O espectro tem cinco regiões orientativas proporcionais à rotação: 0,8–1,2X (desbalanceamento), 1,8–3,2X (desalinhamento), 3–10X (folga), 10–100X (investigação de rolamentos) e acima de 100X (investigação de lubrificação/atrito). Não são faixas normativas nem frequências geométricas de falha. Regiões fora de Nyquist são identificadas e não desenhadas como se fossem medidas. Referências 1X–10X e picos detectados são marcados separadamente; GMF e referências geométricas só aparecem com parâmetros informados.
+
+A fase de 1X é ajustada na frequência exata da rotação e referida ao início do registro, sem referência física de chave de fase.
 
 ## Executar
 
@@ -45,7 +47,7 @@ Regras sinalizam componentes 1X/2X, múltiplos harmônicos e 120 Hz. Não classi
 
 ## Histórico e privacidade
 
-Resumos ficam em `localStorage` neste navegador, até 200 análises. Nenhum histórico global ou rota de exclusão compartilhada. Exportação/importação JSON é validada; gráficos completos são incluídos na exportação individual, mas não no histórico resumido. Limpar dados do navegador remove os resumos; exporte para preservá-los. Pessoas no mesmo perfil do navegador compartilham esse armazenamento local.
+Resumos ficam em `localStorage` neste navegador, até 200 análises. A tela de tendências mostra contagens por condição registrada, quatro gráficos (velocidade RMS, curtose, amplitude 1X e RPM) e uma tabela com diagnósticos. Linhas agrupam apenas equipamento identificado e mesma banda; registros sem identificação são pontos separados. Amplitude, condição e títulos de diagnósticos são salvos nas novas análises. Registros antigos continuam válidos, com campos ausentes indicados como não registrados, sem preencher com zero. Nenhum histórico global ou rota de exclusão compartilhada. Exportação/importação JSON é validada; gráficos completos são incluídos na exportação individual, mas não no histórico resumido. Limpar dados do navegador remove os resumos; exporte para preservá-los. Pessoas no mesmo perfil do navegador compartilham esse armazenamento local.
 
 Arquivos são processados em memória durante a requisição; o código não os salva no servidor. A infraestrutura de hospedagem continua responsável por seus próprios mecanismos de observabilidade. Os bancos SQLite antigos não são lidos, alterados ou publicados pela versão web. Não há migração automática do histórico legado.
 

@@ -72,3 +72,17 @@ def test_velocity_band_without_resolved_bins_is_rejected():
     x=np.sin(2*np.pi*50*np.arange(50)/1000)
     with pytest.raises(ValueError,match='resolução'):
         analyze_measurement(measurement(x),rpm=3000,velocity_min=10,velocity_max=15,health_reference=True)
+
+
+def test_didactic_regions_follow_rotation_and_keep_unmeasured_regions_explicit():
+    t=np.arange(2000)/1000
+    r=analyze_measurement(measurement(np.sin(2*np.pi*50*t)),rpm=3000)
+    regions=r['spectral_regions']
+    assert [(b['start_hz'],b['end_hz']) for b in regions[:3]]==[(40,60),(90,160),(150,500)]
+    assert regions[3]['label']=='Rolamentos' and regions[3]['end_hz']==5000
+    assert regions[4]['label']=='Lubrificação' and regions[4]['end_hz'] is None
+    assert not regions[3]['observable'] and not regions[4]['observable']
+    high=analyze_measurement(measurement(np.sin(2*np.pi*50*np.arange(4000)/4000),fs=4000),rpm=1800)
+    assert high['spectral_regions'][0]['start_hz']==24
+    assert high['spectral_regions'][3]['observable']
+    assert high['spectral_regions'][3]['observed_end_hz']==2000
